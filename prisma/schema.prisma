@@ -1,0 +1,169 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://postgres:1274@localhost:5432/mydb?schema=public"
+}
+
+model User {
+  id           String        @id @default(uuid())
+  username     String        @unique
+  firstName    String?
+  lastName     String?
+  email        String?       @unique
+  phomeNumber  String?       @unique
+  profileImage String?
+  lastActive   DateTime?
+  ghostMode    Boolean       @default(false)
+  bio          String?
+  stars        Int           @default(0)
+  status       String? // Status will be validated using userStatusMap in the application logic
+  isVerified   Boolean       @default(false)
+  password     String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  chats        Chat[]        @relation("ChatUsers")
+  ownedChats   Chat[]        @relation("ChatOwner")
+  ChatMember   ChatMember[]
+  Message      Message[]
+  Reaction     Reaction[]
+  SeenMessage  SeenMessage[]
+}
+
+enum UserStatus {
+  ON_VACATION
+  AT_WORK
+  IN_MEETING
+  AVAILABLE
+  AWAY
+  BUSY
+  DO_NOT_DISTURB
+  AT_GYM
+  AT_HOME
+  TRAVELING
+  SLEEPING
+  IN_CLASS
+  STUDYING
+  AT_COFFEE_SHOP
+  OUT_FOR_LUNCH
+  OFFLINE
+  AT_DOCTOR
+  ON_CALL
+  IN_CONFERENCE
+  TAKING_BREAK
+  ON_TRIP
+  AT_PARTY
+  IN_TRANSIT
+  ON_HOLIDAY
+  WORKING_REMOTELY
+}
+
+model Chat {
+  id              String   @id @default(uuid())
+  type            ChatType
+  title           String? // Optional for private chats
+  description     String? // Bio or info about group/channel
+  chatImage       String? // Group/channel avatar
+  handle          String?  @unique // @handle like @flutter_dev_group
+  ownerId         String?
+  owner           User?    @relation("ChatOwner", fields: [ownerId], references: [id])
+  users           User[]   @relation("ChatUsers")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  isPublic        Boolean  @default(false) // For public discoverable groups/channels
+  inviteLink      String?  @unique // Optional invite URL
+  pinnedMessageId String?  @unique
+  pinnedMessage   Message? @relation("PinnedMessage", fields: [pinnedMessageId], references: [id])
+
+  messages Message[]    @relation("ChatMessages")
+  members  ChatMember[]
+
+  @@index([type])
+}
+
+enum ChatType {
+  private
+  group
+  channel
+}
+
+model ChatMember {
+  id       String   @id @default(uuid())
+  chat     Chat     @relation(fields: [chatId], references: [id])
+  chatId   String
+  user     User     @relation(fields: [userId], references: [id])
+  userId   String
+  role     Role     @default(member)
+  isMuted  Boolean  @default(false)
+  joinedAt DateTime @default(now())
+
+  @@unique([chatId, userId])
+}
+
+enum Role {
+  owner
+  admin
+  member
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  chat           Chat          @relation("ChatMessages", fields: [chatId], references: [id])
+  chatId         String
+  sender         User          @relation(fields: [senderId], references: [id])
+  senderId       String
+  content        String? // Optional, especially if it's a media message
+  messageType    MessageType   @default(text) // text, image, video, etc.
+  mediaUrls      String[] // List of media files
+  mediaThumbnail String? // Optional preview for videos
+  repliedToId    String? // For replies
+  repliedTo      Message?      @relation("MessageReplies", fields: [repliedToId], references: [id])
+  replies        Message[]     @relation("MessageReplies")
+  reactions      Reaction[] // Emoji reactions
+  seenBy         SeenMessage[] // Track who has seen it
+  isEdited       Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  pinnedByChat   Chat?         @relation("PinnedMessage") // Opposite relation for pinnedMessage
+}
+
+model Reaction {
+  id        String  @id @default(uuid())
+  emoji     String // Like "❤️", "😂"
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+  message   Message @relation(fields: [messageId], references: [id])
+  messageId String
+
+  @@unique([userId, messageId, emoji]) // One user can't react with the same emoji multiple times
+}
+
+model SeenMessage {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  message   Message  @relation(fields: [messageId], references: [id])
+  messageId String
+  seenAt    DateTime @default(now())
+
+  @@unique([userId, messageId])
+}
+
+enum MessageType {
+  text
+  image
+  video
+  audio
+  file
+  sticker
+  system // for join/leave/pin etc.
+}
